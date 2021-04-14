@@ -136,7 +136,7 @@
         <jmh.version>1.27</jmh.version>
         <jsr107.tck.version>1.1.1</jsr107.tck.version>
         <junit.version>4.13.2</junit.version>
-        <mockito.version>3.6.0</mockito.version>
+        <mockito.version>3.9.0</mockito.version>
         <powermock.version>2.0.9</powermock.version>
         <reflections.version>0.9.10</reflections.version>
         <zookeeper.version>3.5.8</zookeeper.version>
