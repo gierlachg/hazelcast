@@ -16,6 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.opt.logical;
 
+import com.hazelcast.jet.impl.util.Util;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.jet.sql.impl.schema.JetDynamicTableFunction;
 import com.hazelcast.jet.sql.impl.schema.JetSpecificTableFunction;
@@ -32,6 +33,9 @@ import org.apache.calcite.rel.logical.LogicalTableFunctionScan;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexVisitor;
+import org.apache.calcite.sql.SqlHopTableFunction;
+import org.apache.calcite.sql.SqlTumbleTableFunction;
+import org.apache.calcite.sql.SqlWindowTableFunction;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -86,6 +90,27 @@ final class FullFunctionScanLogicalRules {
         }
     };
 
+    static final RelOptRule SLIDING_WINDOW_FUNCTION_INSTANCE = new ConverterRule(
+            LogicalTableFunctionScan.class, scan -> extractSlidingWindowFunction(scan) != null,
+            Convention.NONE, Convention.NONE,
+            FullFunctionScanLogicalRules.class.getSimpleName() + "(Sliding-Window)"
+    ) {
+        @Override
+        public RelNode convert(RelNode rel) {
+            LogicalTableFunctionScan scan = (LogicalTableFunctionScan) rel;
+
+            return new SlidingWindowLogicalRel(
+                    scan.getCluster(),
+                    OptUtils.toLogicalConvention(scan.getTraitSet()),
+                    Util.toList(scan.getInputs(), OptUtils::toLogicalInput),
+                    scan.getCall(),
+                    scan.getElementType(),
+                    scan.getRowType(),
+                    scan.getColumnMappings()
+            );
+        }
+    };
+
     private FullFunctionScanLogicalRules() {
     }
 
@@ -111,6 +136,19 @@ final class FullFunctionScanLogicalRules {
             return null;
         }
         return (JetDynamicTableFunction) call.getOperator();
+    }
+
+    private static SqlWindowTableFunction extractSlidingWindowFunction(LogicalTableFunctionScan scan) {
+        if (scan == null || !(scan.getCall() instanceof RexCall)) {
+            return null;
+        }
+        RexCall call = (RexCall) scan.getCall();
+
+        if (!(call.getOperator() instanceof SqlTumbleTableFunction)
+                && !(call.getOperator() instanceof SqlHopTableFunction)) {
+            return null;
+        }
+        return (SqlWindowTableFunction) call.getOperator();
     }
 
     private static final class FailingFieldTypeProvider implements PlanNodeFieldTypeProvider {

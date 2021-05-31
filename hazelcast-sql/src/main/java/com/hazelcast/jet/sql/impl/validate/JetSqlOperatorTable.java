@@ -32,6 +32,7 @@ import com.hazelcast.jet.sql.impl.validate.operators.HazelcastMapValueConstructo
 import com.hazelcast.jet.sql.impl.validate.operators.HazelcastRowOperator;
 import com.hazelcast.jet.sql.impl.validate.operators.HazelcastValuesOperator;
 import com.hazelcast.sql.impl.calcite.validate.operators.misc.HazelcastDescOperator;
+import org.apache.calcite.sql.SqlDescriptorOperator;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -40,6 +41,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlPostfixOperator;
 import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.SqlTumbleTableFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.util.ReflectiveSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
@@ -77,6 +79,10 @@ public final class JetSqlOperatorTable extends ReflectiveSqlOperatorTable {
 
     public static final SqlPostfixOperator NULLS_FIRST = HazelcastDescOperator.NULLS_FIRST;
     public static final SqlPostfixOperator NULLS_LAST = HazelcastDescOperator.NULLS_LAST;
+
+    // TODO: HZ operators?
+    public static final SqlFunction TUMBLE = new SqlTumbleTableFunction();
+    public static final SqlOperator DESCRIPTOR = new SqlDescriptorOperator();
 
     private static final JetSqlOperatorTable INSTANCE = new JetSqlOperatorTable();
 

@@ -43,6 +43,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiPredicate;
@@ -56,6 +57,8 @@ import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_VALUE_FOR
 import static com.hazelcast.sql.impl.SqlTestSupport.nodeEngine;
 import static java.util.Collections.emptyList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @Category({QuickTest.class, ParallelJVMTest.class})
 public abstract class SqlTestSupport extends SimpleTestInClusterSupport {
@@ -150,6 +153,15 @@ public abstract class SqlTestSupport extends SimpleTestInClusterSupport {
 
         List<Row> actualRows = new ArrayList<>(rows);
         assertThat(actualRows).containsExactlyInAnyOrderElementsOf(expectedRows);
+    }
+
+    public static void assertEmptyResult(String sql) {
+        SqlService sqlService = instance().getSql();
+        SqlResult result = sqlService.execute(sql);
+        Future<Boolean> future = spawn(() -> result.iterator().hasNext());
+        assertTrueAllTheTime(() -> assertFalse(future.isDone()), 2);
+        result.close();
+        assertTrueEventually(() -> assertTrue(future.isDone()));
     }
 
     /**

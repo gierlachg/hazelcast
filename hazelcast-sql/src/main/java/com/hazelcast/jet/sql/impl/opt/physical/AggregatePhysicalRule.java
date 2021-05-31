@@ -29,6 +29,8 @@ import com.hazelcast.jet.sql.impl.aggregate.ValueSqlAggregation;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.jet.sql.impl.opt.logical.AggregateLogicalRel;
 import com.hazelcast.sql.impl.QueryException;
+import com.hazelcast.sql.impl.calcite.opt.metadata.HazelcastRelMetadataQuery;
+import com.hazelcast.sql.impl.calcite.opt.metadata.WindowProperties;
 import com.hazelcast.sql.impl.type.QueryDataType;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -71,9 +73,18 @@ final class AggregatePhysicalRule extends RelOptRule {
     }
 
     private static RelNode optimize(AggregateLogicalRel logicalAggregate, RelNode physicalInput) {
-        return logicalAggregate.getGroupSet().cardinality() == 0
-                ? toAggregate(logicalAggregate, physicalInput)
-                : toAggregateByKey(logicalAggregate, physicalInput);
+        if (logicalAggregate.getGroupSet().cardinality() == 0) {
+            return toAggregate(logicalAggregate, physicalInput);
+        } else {
+            HazelcastRelMetadataQuery query =
+                    HazelcastRelMetadataQuery.reuseOrCreate(physicalInput.getCluster().getMetadataQuery());
+            WindowProperties windowProperties = query.extractWindowProperties(physicalInput);
+            if (windowProperties == null) {
+                return toAggregateByKey(logicalAggregate, physicalInput);
+            } else {
+                return toSlidingAggregateByKey(logicalAggregate, physicalInput, windowProperties);
+            }
+        }
     }
 
     private static RelNode toAggregate(AggregateLogicalRel logicalAggregate, RelNode physicalInput) {
@@ -151,6 +162,51 @@ final class AggregatePhysicalRule extends RelOptRule {
         }
     }
 
+    private static RelNode toSlidingAggregateByKey(
+            AggregateLogicalRel logicalAggregate,
+            RelNode physicalInput,
+            WindowProperties windowProperties
+    ) {
+        AggregateOperation<?, Object[]> aggrOp = aggregateOperation(
+                physicalInput.getRowType(),
+                logicalAggregate.getGroupSet(),
+                logicalAggregate.getAggCallList()
+        );
+
+        if (logicalAggregate.containsDistinctCall()) {
+            return new SlidingWindowAggregateByKeyPhysicalRel(
+                    physicalInput.getCluster(),
+                    physicalInput.getTraitSet(),
+                    physicalInput,
+                    logicalAggregate.getGroupSet(),
+                    logicalAggregate.getGroupSets(),
+                    logicalAggregate.getAggCallList(),
+                    aggrOp,
+                    windowProperties
+            );
+        } else {
+            RelNode rel = new SlidingWindowAggregateAccumulateByKeyPhysicalRel(
+                    physicalInput.getCluster(),
+                    physicalInput.getTraitSet(),
+                    physicalInput,
+                    logicalAggregate.getGroupSet(),
+                    aggrOp,
+                    windowProperties
+            );
+
+            return new SlidingWindowAggregateCombineByKeyPhysicalRel(
+                    rel.getCluster(),
+                    rel.getTraitSet(),
+                    rel,
+                    logicalAggregate.getGroupSet(),
+                    logicalAggregate.getGroupSets(),
+                    logicalAggregate.getAggCallList(),
+                    aggrOp,
+                    windowProperties
+            );
+        }
+    }
+
     private static AggregateOperation<?, Object[]> aggregateOperation(
             RelDataType inputType,
             ImmutableBitSet groupSet,
@@ -211,6 +267,7 @@ final class AggregatePhysicalRule extends RelOptRule {
             }
         }
 
+        // TODO: deductFn()
         return AggregateOperation
                 .withCreate(() -> {
                     List<SqlAggregation> aggregations = new ArrayList<>(aggregationProviders.size());

@@ -31,9 +31,6 @@ public interface ValidatorResource {
     @BaseMessage("{0} not supported")
     ExInst<SqlValidatorException> notSupported(String name);
 
-    @BaseMessage("Grouping/aggregations not supported for a streaming query")
-    ExInst<SqlValidatorException> streamingAggregationsNotSupported();
-
     @BaseMessage("Sub-query not supported on the right side of a join")
     ExInst<SqlValidatorException> joiningSubqueryNotSupported();
 

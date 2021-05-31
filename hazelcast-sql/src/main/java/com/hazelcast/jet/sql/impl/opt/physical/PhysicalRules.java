@@ -32,6 +32,7 @@ public final class PhysicalRules {
                 ProjectPhysicalRule.INSTANCE,
                 FullScanPhysicalRule.INSTANCE,
                 AggregatePhysicalRule.INSTANCE,
+                SlidingWindowPhysicalRule.INSTANCE,
                 JoinPhysicalRule.INSTANCE,
                 ValuesPhysicalRule.INSTANCE,
                 InsertPhysicalRule.INSTANCE,

@@ -58,6 +58,7 @@ public final class LogicalRules {
                 FullScanLogicalRule.INSTANCE,
                 FullFunctionScanLogicalRules.SPECIFIC_FUNCTION_INSTANCE,
                 FullFunctionScanLogicalRules.DYNAMIC_FUNCTION_INSTANCE,
+                FullFunctionScanLogicalRules.SLIDING_WINDOW_FUNCTION_INSTANCE,
 
                 // Aggregate rules
                 AggregateLogicalRule.INSTANCE,

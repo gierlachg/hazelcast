@@ -22,6 +22,7 @@ import com.hazelcast.sql.impl.calcite.opt.QueryPlanner;
 import com.hazelcast.sql.impl.calcite.opt.cost.CostFactory;
 import com.hazelcast.sql.impl.calcite.opt.distribution.DistributionTraitDef;
 import com.hazelcast.sql.impl.calcite.opt.metadata.HazelcastRelMdRowCount;
+import com.hazelcast.sql.impl.calcite.opt.metadata.HazelcastRelMdWindowProperties;
 import com.hazelcast.sql.impl.calcite.parse.QueryConvertResult;
 import com.hazelcast.sql.impl.calcite.parse.QueryConverter;
 import com.hazelcast.sql.impl.calcite.parse.QueryParseResult;
@@ -61,6 +62,7 @@ public final class OptimizerContext {
 
     private static final RelMetadataProvider METADATA_PROVIDER = ChainedRelMetadataProvider.of(ImmutableList.of(
             HazelcastRelMdRowCount.SOURCE,
+            HazelcastRelMdWindowProperties.SOURCE,
             DefaultRelMetadataProvider.INSTANCE
     ));
 

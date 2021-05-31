@@ -48,7 +48,6 @@ import java.util.List;
 
 import static com.hazelcast.jet.sql.impl.connector.SqlConnectorUtil.getJetSqlConnector;
 import static com.hazelcast.jet.sql.impl.validate.ValidatorResource.RESOURCE;
-import static org.apache.calcite.sql.SqlKind.AGGREGATE;
 import static org.apache.calcite.sql.SqlKind.VALUES;
 
 public class JetSqlValidator extends HazelcastSqlValidator {
@@ -110,14 +109,7 @@ public class JetSqlValidator extends HazelcastSqlValidator {
         }
     }
 
-    @Override
-    protected void validateGroupClause(SqlSelect select) {
-        super.validateGroupClause(select);
-
-        if (containsGroupingOrAggregation(select) && isInfiniteRows(select)) {
-            throw newValidationError(select, RESOURCE.streamingAggregationsNotSupported());
-        }
-    }
+    // TODO: validateGroupClause() assert streaming has a window operator ???
 
     @Override
     protected void validateOrderList(SqlSelect select) {
@@ -126,24 +118,6 @@ public class JetSqlValidator extends HazelcastSqlValidator {
         if (select.hasOrderBy() && isInfiniteRows(select)) {
             throw newValidationError(select, RESOURCE.streamingSortingNotSupported());
         }
-    }
-
-    private boolean containsGroupingOrAggregation(SqlSelect select) {
-        if (select.getGroup() != null && select.getGroup().size() > 0) {
-            return true;
-        }
-
-        if (select.isDistinct()) {
-            return true;
-        }
-
-        for (SqlNode node : select.getSelectList()) {
-            if (node.getKind().belongsTo(AGGREGATE)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
