@@ -34,7 +34,6 @@ import static com.hazelcast.jet.sql.impl.connector.test.TestStreamSqlConnector.w
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SqlTumbleTest extends SqlTestSupport {
 
@@ -54,9 +53,9 @@ public class SqlTumbleTest extends SqlTestSupport {
                 "TABLE(TUMBLE(TABLE " + name + " , DESCRIPTOR(ts), INTERVAL '1' SECOND))")
         ) {
             assertThat(result.getRowMetadata().findColumn("window_start")).isGreaterThan(-1);
-            assertThat(result.getRowMetadata().getColumn(2).getType()).isEqualTo(SqlColumnType.TIMESTAMP);
+            assertThat(result.getRowMetadata().getColumn(2).getType()).isEqualTo(SqlColumnType.TIMESTAMP_WITH_TIME_ZONE);
             assertThat(result.getRowMetadata().findColumn("window_end")).isGreaterThan(-1);
-            assertThat(result.getRowMetadata().getColumn(3).getType()).isEqualTo(SqlColumnType.TIMESTAMP);
+            assertThat(result.getRowMetadata().getColumn(3).getType()).isEqualTo(SqlColumnType.TIMESTAMP_WITH_TIME_ZONE);
         }
     }
 
@@ -183,7 +182,7 @@ public class SqlTumbleTest extends SqlTestSupport {
         assertRowsEventuallyInAnyOrder(
                 "SELECT window_start, name || '-s', COUNT(name) FROM " +
                         "TABLE(TUMBLE(TABLE " + name + ", DESCRIPTOR(ts), INTERVAL '0.002' SECOND)) " +
-                        "GROUP BY name, window_start",
+                        "GROUP BY name || '-s', window_start",
                 asList(
                         new Row(timestamp(0L), "Alice-s", 2L),
                         new Row(timestamp(2L), "Alice-s", 1L),
@@ -251,7 +250,7 @@ public class SqlTumbleTest extends SqlTestSupport {
         assertRowsEventuallyInAnyOrder(
                 "SELECT window_start, name, COUNT(name) FROM " +
                         "TABLE(TUMBLE(TABLE " + name + ", DESCRIPTOR(ts), INTERVAL '0.002' SECOND)) " +
-                        "WHERE ts > '1970-01-01T00:00:00.000' " +
+                        "WHERE ts > '1970-01-01T00:00:00.000Z' " +
                         "GROUP BY name, window_start",
                 asList(
                         new Row(timestamp(0L), "Bob", 1L),
@@ -279,7 +278,7 @@ public class SqlTumbleTest extends SqlTestSupport {
                         "           TABLE " + name +
                         "           , DESCRIPTOR(ts)" +
                         "           , INTERVAL '0.002' SECOND" +
-                        "       )) WHERE ts > '1970-01-01T00:00:00.000'" +
+                        "       )) WHERE ts > '1970-01-01T00:00:00.000Z'" +
                         "   )" +
                         "   , DESCRIPTOR(ts)" +
                         "   , INTERVAL '0.003' SECOND" +
@@ -289,6 +288,38 @@ public class SqlTumbleTest extends SqlTestSupport {
                         new Row(timestamp(0L), "Alice", 1L),
                         new Row(timestamp(2L), "Alice", 1L),
                         new Row(timestamp(2L), "Bob", 1L)
+                )
+        );
+    }
+
+    @Test
+    public void test_nested_project() {
+        String name = createTable(
+                new Object[]{timestamp(0), "Alice"},
+                new Object[]{timestamp(1), "Alice"},
+                new Object[]{timestamp(2), "Alice"},
+                new Object[]{timestamp(3), "Bob"},
+                watermark(10)
+        );
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT window_start_inner_2, window_start_inner_1, name, COUNT(name) FROM " +
+                        "TABLE(TUMBLE(" +
+                        "   (SELECT ts, name, window_start window_start_inner_1, window_start window_start_inner_2 FROM" +
+                        "      TABLE(TUMBLE(" +
+                        "           TABLE " + name +
+                        "           , DESCRIPTOR(ts)" +
+                        "           , INTERVAL '0.002' SECOND" +
+                        "       ))" +
+                        "   )" +
+                        "   , DESCRIPTOR(ts)" +
+                        "   , INTERVAL '0.003' SECOND" +
+                        ")) " +
+                        "GROUP BY window_start_inner_2, window_start_inner_1, name",
+                asList(
+                        new Row(timestamp(0L), timestamp(0L), "Alice", 2L),
+                        new Row(timestamp(2L), timestamp(2L), "Alice", 1L),
+                        new Row(timestamp(2L), timestamp(2L), "Bob", 1L)
                 )
         );
     }
@@ -391,7 +422,7 @@ public class SqlTumbleTest extends SqlTestSupport {
     }
 
     @Test
-    @Ignore // TODO: ???
+    @Ignore // TODO:
     public void test_dynamicParameters() {
         String name = createTable(
                 new Object[]{timestamp(0), "Alice"},
@@ -419,7 +450,7 @@ public class SqlTumbleTest extends SqlTestSupport {
                 sqlService,
                 name,
                 asList("ts", "name"),
-                asList(QueryDataTypeFamily.TIMESTAMP, QueryDataTypeFamily.VARCHAR),
+                asList(QueryDataTypeFamily.TIMESTAMP_WITH_TIME_ZONE, QueryDataTypeFamily.VARCHAR),
                 new Object[]{timestamp(0), "Alice"},
                 new Object[]{timestamp(1), null},
                 new Object[]{timestamp(2), "Alice"},
@@ -438,14 +469,28 @@ public class SqlTumbleTest extends SqlTestSupport {
     }
 
     @Test
-    public void when_projectionIsUsedOnWindowEdge_then_throws() {
-        String name = createTable();
+    public void when_windowEdgeIsProjected_then_regularAggregationIsApplied() {
+        String name = randomName();
+        TestBatchSqlConnector.create(
+                sqlService,
+                name,
+                asList("ts", "name"),
+                asList(QueryDataTypeFamily.TIMESTAMP_WITH_TIME_ZONE, QueryDataTypeFamily.VARCHAR),
+                new Object[]{timestamp(0), "Alice"},
+                new Object[]{timestamp(1), null},
+                new Object[]{timestamp(2), "Alice"},
+                new Object[]{timestamp(3), "Bob"}
+        );
 
-        assertThatThrownBy(() -> sqlService.execute(
-                "SELECT window_start + INTERVAL '0.001' SECOND FROM " +
+        assertRowsEventuallyInAnyOrder(
+                "SELECT window_start + INTERVAL '0.001' SECOND, COUNT(name) FROM " +
                         "TABLE(TUMBLE(TABLE " + name + ", DESCRIPTOR(ts), INTERVAL '0.002' SECOND)) " +
-                        "GROUP BY window_start + INTERVAL '0.001' SECOND"
-        )).hasMessageContaining("Invalid window aggregation");
+                        "GROUP BY window_start + INTERVAL '0.001' SECOND",
+                asList(
+                        new Row(timestamp(1L), 1L),
+                        new Row(timestamp(3L), 2L)
+                )
+        );
     }
 
     private static String createTable(Object[]... values) {
@@ -454,7 +499,7 @@ public class SqlTumbleTest extends SqlTestSupport {
                 sqlService,
                 name,
                 asList("ts", "name"),
-                asList(QueryDataTypeFamily.TIMESTAMP, QueryDataTypeFamily.VARCHAR),
+                asList(QueryDataTypeFamily.TIMESTAMP_WITH_TIME_ZONE, QueryDataTypeFamily.VARCHAR),
                 values
         );
         return name;

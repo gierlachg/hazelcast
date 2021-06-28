@@ -16,13 +16,17 @@
 
 package com.hazelcast.jet.sql.impl.opt.physical;
 
-import com.hazelcast.function.FunctionEx;
+import com.hazelcast.function.SupplierEx;
 import com.hazelcast.jet.core.SlidingWindowPolicy;
 import com.hazelcast.jet.core.Vertex;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.jet.sql.impl.validate.JetSqlOperatorTable;
 import com.hazelcast.sql.impl.QueryParameterMetadata;
+import com.hazelcast.sql.impl.calcite.opt.physical.visitor.RexToExpressionVisitor;
+import com.hazelcast.sql.impl.expression.Expression;
 import com.hazelcast.sql.impl.plan.node.PlanNodeSchema;
+import com.hazelcast.sql.impl.row.EmptyRow;
+import com.hazelcast.sql.impl.type.SqlDaySecondInterval;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -31,23 +35,17 @@ import org.apache.calcite.rel.metadata.RelColumnMapping;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 
 import java.lang.reflect.Type;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 
+import static com.hazelcast.internal.util.Preconditions.checkTrue;
 import static com.hazelcast.jet.core.SlidingWindowPolicy.tumblingWinPolicy;
+import static com.hazelcast.sql.impl.plan.node.PlanNodeFieldTypeProvider.FAILING_FIELD_TYPE_PROVIDER;
 
 public class SlidingWindowPhysicalRel extends TableFunctionScan implements PhysicalRel {
-
-    private final int timeFieldIndex;
-    private final SlidingWindowPolicy windowPolicy;
 
     SlidingWindowPhysicalRel(
             RelOptCluster cluster,
@@ -60,43 +58,24 @@ public class SlidingWindowPhysicalRel extends TableFunctionScan implements Physi
     ) {
         super(cluster, traitSet, inputs, rexCall, elementType, rowType, columnMappings);
 
-        // TODO: RexToExpressionVisitor ???
         RexCall call = (RexCall) getCall();
-        List<RexNode> operands = call.getOperands();
-        if (call.getOperator() == JetSqlOperatorTable.TUMBLE) {
-            this.timeFieldIndex = ((RexInputRef) ((RexCall) operands.get(0)).getOperands().get(0)).getIndex();
-            this.windowPolicy = tumblingWinPolicy(((BigDecimal) ((RexLiteral) operands.get(1)).getValue()).longValue());
-        } else {
-            throw new IllegalArgumentException("Unsupported operator: " + call.getOperator());
-        }
+        checkTrue(call.getOperator() == JetSqlOperatorTable.TUMBLE, "Unsupported operator: " + call.getOperator());
     }
 
-    public FunctionEx<Object[], LocalDateTime> windowStartFn() {
-        int timeFieldIndex = this.timeFieldIndex;
-        SlidingWindowPolicy windowPolicy = this.windowPolicy;
-        return row -> {
-            // TODO: ...
-            LocalDateTime timestamp = (LocalDateTime) row[timeFieldIndex];
-            long timestampMillis = timestamp.toInstant(ZoneOffset.UTC).toEpochMilli();
-            long windowStartMillis = windowPolicy.floorFrameTs(timestampMillis);
-            return LocalDateTime.ofInstant(Instant.ofEpochMilli(windowStartMillis), ZoneOffset.UTC);
-        };
+    public int timestampFieldIndex() {
+        return ((RexInputRef) ((RexCall) operand(0)).getOperands().get(0)).getIndex();
     }
 
-    public FunctionEx<Object[], LocalDateTime> windowEndFn() {
-        int timeFieldIndex = this.timeFieldIndex;
-        SlidingWindowPolicy windowPolicy = this.windowPolicy;
-        return row -> {
-            // TODO: ...
-            LocalDateTime timestamp = (LocalDateTime) row[timeFieldIndex];
-            long timestampMillis = timestamp.toInstant(ZoneOffset.UTC).toEpochMilli();
-            long windowEndMillis = windowPolicy.higherFrameTs(timestampMillis);
-            return LocalDateTime.ofInstant(Instant.ofEpochMilli(windowEndMillis), ZoneOffset.UTC);
-        };
+    @SuppressWarnings("unchecked")
+    public SupplierEx<SlidingWindowPolicy> windowPolicySupplier(QueryParameterMetadata parameterMetadata) {
+        RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata);
+        Expression<SqlDaySecondInterval> windowExpression = (Expression<SqlDaySecondInterval>) operand(1).accept(visitor);
+        // TODO: pass ExpressionEvalContext once interval dynamic params are supported
+        return () -> tumblingWinPolicy(windowExpression.eval(EmptyRow.INSTANCE, null).getMillis());
     }
 
-    public SlidingWindowPolicy windowPolicy() {
-        return windowPolicy;
+    private RexNode operand(int index) {
+        return ((RexCall) getCall()).getOperands().get(index);
     }
 
     public RelNode getInput() {

@@ -24,6 +24,7 @@ import com.hazelcast.jet.sql.impl.aggregate.function.HazelcastAvgAggFunction;
 import com.hazelcast.jet.sql.impl.aggregate.function.HazelcastCountAggFunction;
 import com.hazelcast.jet.sql.impl.aggregate.function.HazelcastMinMaxAggFunction;
 import com.hazelcast.jet.sql.impl.aggregate.function.HazelcastSumAggFunction;
+import com.hazelcast.jet.sql.impl.aggregate.function.HazelcastTumbleTableFunction;
 import com.hazelcast.jet.sql.impl.connector.file.FileTableFunction;
 import com.hazelcast.jet.sql.impl.connector.generator.SeriesGeneratorTableFunction;
 import com.hazelcast.jet.sql.impl.connector.generator.StreamGeneratorTableFunction;
@@ -41,7 +42,6 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlPostfixOperator;
 import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.SqlTumbleTableFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.util.ReflectiveSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
@@ -69,6 +69,9 @@ public final class JetSqlOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction MIN = new HazelcastMinMaxAggFunction(SqlKind.MIN);
     public static final SqlFunction MAX = new HazelcastMinMaxAggFunction(SqlKind.MAX);
 
+    public static final SqlFunction TUMBLE = new HazelcastTumbleTableFunction();
+    public static final SqlOperator DESCRIPTOR = new SqlDescriptorOperator();
+
     public static final SqlFunction GENERATE_SERIES = new SeriesGeneratorTableFunction();
     public static final SqlFunction GENERATE_STREAM = new StreamGeneratorTableFunction();
 
@@ -79,10 +82,6 @@ public final class JetSqlOperatorTable extends ReflectiveSqlOperatorTable {
 
     public static final SqlPostfixOperator NULLS_FIRST = HazelcastDescOperator.NULLS_FIRST;
     public static final SqlPostfixOperator NULLS_LAST = HazelcastDescOperator.NULLS_LAST;
-
-    // TODO: HZ operators?
-    public static final SqlFunction TUMBLE = new SqlTumbleTableFunction();
-    public static final SqlOperator DESCRIPTOR = new SqlDescriptorOperator();
 
     private static final JetSqlOperatorTable INSTANCE = new JetSqlOperatorTable();
 

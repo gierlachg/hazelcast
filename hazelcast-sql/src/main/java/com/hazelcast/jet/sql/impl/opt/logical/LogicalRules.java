@@ -56,12 +56,12 @@ public final class LogicalRules {
 
                 // Scan rules
                 FullScanLogicalRule.INSTANCE,
-                FullFunctionScanLogicalRules.SPECIFIC_FUNCTION_INSTANCE,
-                FullFunctionScanLogicalRules.DYNAMIC_FUNCTION_INSTANCE,
-                FullFunctionScanLogicalRules.SLIDING_WINDOW_FUNCTION_INSTANCE,
+                FunctionLogicalRules.SPECIFIC_FUNCTION_INSTANCE,
+                FunctionLogicalRules.DYNAMIC_FUNCTION_INSTANCE,
 
                 // Aggregate rules
                 AggregateLogicalRule.INSTANCE,
+                FunctionLogicalRules.SLIDING_WINDOW_FUNCTION_INSTANCE,
 
                 // Join
                 JoinLogicalRule.INSTANCE,

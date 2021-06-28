@@ -43,7 +43,7 @@ import com.hazelcast.sql.impl.type.QueryDataTypeFamily;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -122,8 +122,8 @@ public class TestStreamSqlConnector implements SqlConnector {
         sqlService.execute(sql).updateCount();
     }
 
-    public static LocalDateTime timestamp(long epochMillis) {
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneOffset.UTC);
+    public static OffsetDateTime timestamp(long epochMillis) {
+        return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneOffset.UTC);
     }
 
     public static String[] watermark(long watermark) {

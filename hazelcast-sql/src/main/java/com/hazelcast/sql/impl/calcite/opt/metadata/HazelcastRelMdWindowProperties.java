@@ -17,9 +17,11 @@
 package com.hazelcast.sql.impl.calcite.opt.metadata;
 
 import com.hazelcast.jet.sql.impl.opt.physical.SlidingWindowPhysicalRel;
+import com.hazelcast.sql.impl.QueryParameterMetadata;
 import com.hazelcast.sql.impl.calcite.opt.metadata.WindowProperties.WindowEndProperty;
 import com.hazelcast.sql.impl.calcite.opt.metadata.WindowProperties.WindowProperty;
 import com.hazelcast.sql.impl.calcite.opt.metadata.WindowProperties.WindowStartProperty;
+import org.apache.calcite.plan.HazelcastRelOptCluster;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.SingleRel;
@@ -63,9 +65,11 @@ public final class HazelcastRelMdWindowProperties implements MetadataHandler<Haz
     @SuppressWarnings("unused")
     public WindowProperties extractWindowProperties(SlidingWindowPhysicalRel rel, RelMetadataQuery mq) {
         int fieldCount = rel.getRowType().getFieldCount();
+
+        QueryParameterMetadata parameterMetadata = ((HazelcastRelOptCluster) rel.getCluster()).getParameterMetadata();
         WindowProperties windowProperties = new WindowProperties(
-                new WindowStartProperty(fieldCount - 2, rel.windowPolicy()),
-                new WindowEndProperty(fieldCount - 1, rel.windowPolicy())
+                new WindowStartProperty(fieldCount - 2, rel.windowPolicySupplier(parameterMetadata)),
+                new WindowEndProperty(fieldCount - 1, rel.windowPolicySupplier(parameterMetadata))
         );
 
         HazelcastRelMetadataQuery query = HazelcastRelMetadataQuery.reuseOrCreate(mq);

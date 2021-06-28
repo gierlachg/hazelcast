@@ -17,10 +17,7 @@
 package com.hazelcast.jet.sql.impl.opt.physical;
 
 import com.hazelcast.function.FunctionEx;
-import com.hazelcast.function.SupplierEx;
-import com.hazelcast.function.ToLongFunctionEx;
 import com.hazelcast.jet.aggregate.AggregateOperation;
-import com.hazelcast.jet.core.SlidingWindowPolicy;
 import com.hazelcast.jet.core.Vertex;
 import com.hazelcast.jet.sql.impl.aggregate.ObjectArrayKey;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
@@ -36,6 +33,7 @@ import org.apache.calcite.util.ImmutableBitSet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class SlidingWindowAggregateByKeyPhysicalRel extends Aggregate implements PhysicalRel {
 
@@ -66,12 +64,8 @@ public class SlidingWindowAggregateByKeyPhysicalRel extends Aggregate implements
         return aggrOp;
     }
 
-    public ToLongFunctionEx<Object[]> timestampFn() {
-        return windowProperties.findFirst(groupSet.toList()).timestampFn();
-    }
-
-    public SupplierEx<SlidingWindowPolicy> windowPolicyFn() {
-        return windowProperties.findFirst(groupSet.toList()).windowPolicyFn();
+    public WindowProperties.WindowProperty windowProperty() {
+        return Objects.requireNonNull(windowProperties.findFirst(groupSet.toList()));
     }
 
     @Override

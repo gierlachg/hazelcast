@@ -16,9 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.opt.physical;
 
-import com.hazelcast.function.SupplierEx;
 import com.hazelcast.jet.aggregate.AggregateOperation;
-import com.hazelcast.jet.core.SlidingWindowPolicy;
 import com.hazelcast.jet.core.Vertex;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.sql.impl.QueryParameterMetadata;
@@ -33,6 +31,7 @@ import org.apache.calcite.util.ImmutableBitSet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class SlidingWindowAggregateCombineByKeyPhysicalRel extends Aggregate implements PhysicalRel {
 
@@ -59,8 +58,8 @@ public class SlidingWindowAggregateCombineByKeyPhysicalRel extends Aggregate imp
         return aggrOp;
     }
 
-    public SupplierEx<SlidingWindowPolicy> windowPolicyFn() {
-        return windowProperties.findFirst(groupSet.toList()).windowPolicyFn();
+    public WindowProperties.WindowProperty windowProperty() {
+        return Objects.requireNonNull(windowProperties.findFirst(groupSet.toList()));
     }
 
     @Override

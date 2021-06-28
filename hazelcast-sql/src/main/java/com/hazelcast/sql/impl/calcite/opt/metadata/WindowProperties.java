@@ -20,8 +20,8 @@ import com.hazelcast.function.SupplierEx;
 import com.hazelcast.function.ToLongFunctionEx;
 import com.hazelcast.jet.core.SlidingWindowPolicy;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import javax.annotation.Nullable;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -64,6 +64,7 @@ public final class WindowProperties {
         return new WindowProperties(propertiesByIndex);
     }
 
+    @Nullable
     public WindowProperty findFirst(List<Integer> indices) {
         for (int index : indices) {
             WindowProperty property = propertiesByIndex.get(index);
@@ -71,9 +72,7 @@ public final class WindowProperties {
                 return property;
             }
         }
-        // TODO: is it possible to detect it earlier?
-        throw new IllegalStateException("Invalid window aggregation. " +
-                "Use either 'window_start' or 'window_end' in GROUP BY clause.");
+        return null;
     }
 
     public Stream<WindowProperty> getProperties() {
@@ -86,7 +85,7 @@ public final class WindowProperties {
 
         ToLongFunctionEx<Object[]> timestampFn();
 
-        SupplierEx<SlidingWindowPolicy> windowPolicyFn();
+        SlidingWindowPolicy windowPolicy();
 
         WindowProperty withIndex(int index);
     }
@@ -94,11 +93,11 @@ public final class WindowProperties {
     public static class WindowStartProperty implements WindowProperty {
 
         private final int index;
-        private final SlidingWindowPolicy windowPolicy;
+        private final SupplierEx<SlidingWindowPolicy> windowPolicySupplier;
 
-        public WindowStartProperty(int index, SlidingWindowPolicy windowPolicy) {
+        public WindowStartProperty(int index, SupplierEx<SlidingWindowPolicy> windowPolicySupplier) {
             this.index = index;
-            this.windowPolicy = windowPolicy;
+            this.windowPolicySupplier = windowPolicySupplier;
         }
 
         @Override
@@ -110,32 +109,30 @@ public final class WindowProperties {
         public ToLongFunctionEx<Object[]> timestampFn() {
             int index = this.index;
             return row -> {
-                // TODO: ...
-                LocalDateTime timestamp = (LocalDateTime) row[index];
-                return timestamp.toInstant(ZoneOffset.UTC).toEpochMilli();
+                OffsetDateTime timestamp = (OffsetDateTime) row[index];
+                return timestamp.toInstant().toEpochMilli();
             };
         }
 
         @Override
-        public SupplierEx<SlidingWindowPolicy> windowPolicyFn() {
-            SlidingWindowPolicy windowPolicy = this.windowPolicy;
-            return () -> windowPolicy;
+        public SlidingWindowPolicy windowPolicy() {
+            return windowPolicySupplier.get();
         }
 
         @Override
         public WindowStartProperty withIndex(int index) {
-            return new WindowStartProperty(index, windowPolicy);
+            return new WindowStartProperty(index, windowPolicySupplier);
         }
     }
 
     public static class WindowEndProperty implements WindowProperty {
 
         private final int index;
-        private final SlidingWindowPolicy windowPolicy;
+        private final SupplierEx<SlidingWindowPolicy> windowPolicySupplier;
 
-        public WindowEndProperty(int index, SlidingWindowPolicy windowPolicy) {
+        public WindowEndProperty(int index, SupplierEx<SlidingWindowPolicy> windowPolicySupplier) {
             this.index = index;
-            this.windowPolicy = windowPolicy;
+            this.windowPolicySupplier = windowPolicySupplier;
         }
 
         @Override
@@ -146,23 +143,21 @@ public final class WindowProperties {
         @Override
         public ToLongFunctionEx<Object[]> timestampFn() {
             int index = this.index;
-            SlidingWindowPolicy windowPolicy = this.windowPolicy;
+            SlidingWindowPolicy windowPolicy = this.windowPolicySupplier.get();
             return row -> {
-                // TODO: ...
-                LocalDateTime timestamp = (LocalDateTime) row[index];
-                return timestamp.toInstant(ZoneOffset.UTC).toEpochMilli() - windowPolicy.windowSize();
+                OffsetDateTime timestamp = (OffsetDateTime) row[index];
+                return timestamp.toInstant().toEpochMilli() - windowPolicy.windowSize();
             };
         }
 
         @Override
-        public SupplierEx<SlidingWindowPolicy> windowPolicyFn() {
-            SlidingWindowPolicy windowPolicy = this.windowPolicy;
-            return () -> windowPolicy;
+        public SlidingWindowPolicy windowPolicy() {
+            return windowPolicySupplier.get();
         }
 
         @Override
         public WindowEndProperty withIndex(int index) {
-            return new WindowEndProperty(index, windowPolicy);
+            return new WindowEndProperty(index, windowPolicySupplier);
         }
     }
 }

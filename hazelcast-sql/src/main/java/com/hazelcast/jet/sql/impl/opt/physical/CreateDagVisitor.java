@@ -40,6 +40,7 @@ import com.hazelcast.jet.sql.impl.connector.SqlConnector.VertexWithInputConfig;
 import com.hazelcast.jet.sql.impl.opt.ExpressionValues;
 import com.hazelcast.spi.impl.NodeEngine;
 import com.hazelcast.sql.impl.QueryParameterMetadata;
+import com.hazelcast.sql.impl.calcite.opt.metadata.WindowProperties;
 import com.hazelcast.sql.impl.calcite.schema.HazelcastTable;
 import com.hazelcast.sql.impl.expression.ConstantExpression;
 import com.hazelcast.sql.impl.expression.Expression;
@@ -50,7 +51,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.SingleRel;
 
 import javax.annotation.Nullable;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -68,6 +69,7 @@ import static com.hazelcast.jet.core.processor.Processors.sortP;
 import static com.hazelcast.jet.core.processor.SourceProcessors.convenientSourceP;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnectorUtil.getJetSqlConnector;
 import static com.hazelcast.jet.sql.impl.processors.RootResultConsumerSink.rootResultConsumerSink;
+import static com.hazelcast.sql.impl.expression.datetime.DateTimeUtils.asTimestampWithTimezone;
 import static java.util.Collections.singletonList;
 
 public class CreateDagVisitor {
@@ -250,17 +252,22 @@ public class CreateDagVisitor {
     }
 
     public Vertex onSlidingWindow(SlidingWindowPhysicalRel rel) {
-        FunctionEx<Object[], LocalDateTime> windowStartFn = rel.windowStartFn();
-        FunctionEx<Object[], LocalDateTime> windowEndFn = rel.windowEndFn();
+        int timestampFieldIndex = rel.timestampFieldIndex();
+        SupplierEx<SlidingWindowPolicy> windowPolicySupplier = rel.windowPolicySupplier(parameterMetadata);
 
         Vertex vertex = dag.newUniqueVertex(
                 "Sliding-Window",
                 mapUsingServiceP(ServiceFactories.nonSharedService(ctx -> {
-                            //noinspection CodeBlock2Expr
-                            return values -> {
-                                Object[] result = Arrays.copyOf(values, values.length + 2);
-                                result[result.length - 2] = windowStartFn.apply(values);
-                                result[result.length - 1] = windowEndFn.apply(values);
+                            SlidingWindowPolicy windowPolicy = windowPolicySupplier.get();
+                            return row -> {
+                                OffsetDateTime timestamp = (OffsetDateTime) row[timestampFieldIndex];
+                                long timestampMillis = timestamp.toInstant().toEpochMilli();
+                                long windowStartMillis = windowPolicy.floorFrameTs(timestampMillis);
+                                long windowEndMillis = windowPolicy.higherFrameTs(timestampMillis);
+
+                                Object[] result = Arrays.copyOf(row, row.length + 2);
+                                result[result.length - 2] = asTimestampWithTimezone(windowStartMillis, timestamp.getOffset());
+                                result[result.length - 1] = asTimestampWithTimezone(windowEndMillis, timestamp.getOffset());
                                 return result;
                             };
                         }),
@@ -274,8 +281,10 @@ public class CreateDagVisitor {
     public Vertex onSlidingWindowAggregateByKey(SlidingWindowAggregateByKeyPhysicalRel rel) {
         FunctionEx<Object[], ?> groupKeyFn = rel.groupKeyFn();
         AggregateOperation<?, Object[]> aggregateOperation = rel.aggrOp();
-        ToLongFunctionEx<Object[]> timestampFn = rel.timestampFn();
-        SupplierEx<SlidingWindowPolicy> windowPolicyFnSupplier = rel.windowPolicyFn();
+
+        WindowProperties.WindowProperty windowProperty = rel.windowProperty();
+        ToLongFunctionEx<Object[]> timestampFn = windowProperty.timestampFn();
+        SlidingWindowPolicy windowPolicy = windowProperty.windowPolicy();
 
         Vertex vertex = dag.newUniqueVertex(
                 "Sliding-Window-AggregateByKey",
@@ -283,7 +292,7 @@ public class CreateDagVisitor {
                         singletonList(groupKeyFn),
                         singletonList(timestampFn),
                         TimestampKind.EVENT,
-                        windowPolicyFnSupplier.get(),
+                        windowPolicy,
                         0,
                         aggregateOperation,
                         (start, end, ignoredKey, result, isEarly) -> result
@@ -296,8 +305,10 @@ public class CreateDagVisitor {
     public Vertex onSlidingWindowAccumulateByKey(SlidingWindowAggregateAccumulateByKeyPhysicalRel rel) {
         FunctionEx<Object[], ?> groupKeyFn = rel.groupKeyFn();
         AggregateOperation<?, Object[]> aggregateOperation = rel.aggrOp();
-        ToLongFunctionEx<Object[]> timestampFn = rel.timestampFn();
-        SupplierEx<SlidingWindowPolicy> windowPolicyFn = rel.windowPolicyFn();
+
+        WindowProperties.WindowProperty windowProperty = rel.windowProperty();
+        ToLongFunctionEx<Object[]> timestampFn = windowProperty.timestampFn();
+        SlidingWindowPolicy windowPolicy = windowProperty.windowPolicy();
 
         Vertex vertex = dag.newUniqueVertex(
                 "Sliding-Window-AccumulateByKey",
@@ -305,7 +316,7 @@ public class CreateDagVisitor {
                         singletonList(groupKeyFn),
                         singletonList(timestampFn),
                         TimestampKind.EVENT,
-                        windowPolicyFn.get(),
+                        windowPolicy,
                         aggregateOperation
                 )
         );
@@ -315,12 +326,14 @@ public class CreateDagVisitor {
 
     public Vertex onSlidingWindowCombineByKey(SlidingWindowAggregateCombineByKeyPhysicalRel rel) {
         AggregateOperation<?, Object[]> aggregateOperation = rel.aggrOp();
-        SupplierEx<SlidingWindowPolicy> windowPolicyFn = rel.windowPolicyFn();
+
+        WindowProperties.WindowProperty windowProperty = rel.windowProperty();
+        SlidingWindowPolicy windowPolicy = windowProperty.windowPolicy();
 
         Vertex vertex = dag.newUniqueVertex(
                 "Sliding-Window-CombineByKey",
                 Processors.combineToSlidingWindowP(
-                        windowPolicyFn.get(),
+                        windowPolicy,
                         aggregateOperation,
                         (start, end, ignoredKey, result, isEarly) -> result
                 )
@@ -413,7 +426,7 @@ public class CreateDagVisitor {
      * vertices normally connected by an unicast or isolated edge, depending on
      * whether the {@code rel} has collation fields.
      *
-     * @param rel The rel to connect to input
+     * @param rel    The rel to connect to input
      * @param vertex The vertex for {@code rel}
      */
     private void connectInputPreserveCollation(SingleRel rel, Vertex vertex) {

@@ -79,7 +79,7 @@ final class AggregatePhysicalRule extends RelOptRule {
             HazelcastRelMetadataQuery query =
                     HazelcastRelMetadataQuery.reuseOrCreate(physicalInput.getCluster().getMetadataQuery());
             WindowProperties windowProperties = query.extractWindowProperties(physicalInput);
-            if (windowProperties == null) {
+            if (windowProperties == null || windowProperties.findFirst(logicalAggregate.getGroupSet().asList()) == null) {
                 return toAggregateByKey(logicalAggregate, physicalInput);
             } else {
                 return toSlidingAggregateByKey(logicalAggregate, physicalInput, windowProperties);
