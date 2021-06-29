@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2008-2021, Hazelcast, Inc. All Rights Reserved.
+ * Copyright 2021 Hazelcast Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Hazelcast Community License (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://hazelcast.com/hazelcast-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * WITHOUT WARRANTIES OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -33,7 +33,6 @@ import org.apache.calcite.rel.logical.LogicalTableFunctionScan;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexVisitor;
-import org.apache.calcite.sql.SqlHopTableFunction;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -88,7 +87,7 @@ final class FunctionLogicalRules {
         }
     };
 
-    // TODO: should it be here?
+    // TODO: separate rule ?
     static final RelOptRule SLIDING_WINDOW_FUNCTION_INSTANCE = new ConverterRule(
             LogicalTableFunctionScan.class, scan -> extractSlidingWindowFunction(scan) != null,
             Convention.NONE, Convention.NONE,
