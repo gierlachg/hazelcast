@@ -54,18 +54,24 @@ import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableBitSet;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
+import static com.hazelcast.internal.util.Preconditions.checkNotNegative;
 import static com.hazelcast.jet.sql.impl.opt.JetConventions.LOGICAL;
 import static com.hazelcast.jet.sql.impl.opt.JetConventions.PHYSICAL;
+import static java.util.Collections.singletonMap;
 
 /**
  * Static utility classes for rules.
@@ -271,8 +277,7 @@ public final class OptUtils {
         return table != null && tableClass.isAssignableFrom(table.getTarget().getClass());
     }
 
-    @SuppressWarnings("checkstyle:AvoidNestedBlocks")
-    public static RexNode extractKeyConstantExpression(RelOptTable relTable, RexBuilder rexBuilder) {
+    public static Tuple2<List<RexNode>, RexNode> extractKeyProjection(RelOptTable relTable, RexBuilder rexBuilder) {
         HazelcastTable table = relTable.unwrap(HazelcastTable.class);
 
         RexNode filter = table.getFilter();
@@ -280,27 +285,76 @@ public final class OptUtils {
             return null;
         }
 
-        int keyIndex = findKeyIndex(table.getTarget());
-        switch (filter.getKind()) {
-            // WHERE __key = true, calcite simplifies to just `WHERE __key`
+        Map<Integer, RexNode> expressionsByIndex = decomposeConjunctiveEqualConstantExpressions(filter, rexBuilder);
+        if (expressionsByIndex == null) {
+            return null;
+        }
+
+        ImmutableBitSet keyIndices = findKeyIndices(table.getTarget());
+        List<RexNode> keyNodes = new ArrayList<>(keyIndices.cardinality());
+        List<RexNode> nonKeyNodes = new ArrayList<>(expressionsByIndex.size() - keyIndices.cardinality());
+        for (Entry<Integer, RexNode> entry : expressionsByIndex.entrySet()) {
+            Integer index = entry.getKey();
+            RexNode node = entry.getValue();
+            if (keyIndices.get(index)) {
+                keyNodes.add(node);
+            } else {
+                nonKeyNodes.add(node);
+            }
+        }
+        return keyNodes.size() == keyIndices.cardinality()
+                ? Tuple2.tuple2(keyNodes, RexUtil.composeConjunction(rexBuilder, nonKeyNodes, true))
+                : null;
+    }
+
+    private static ImmutableBitSet findKeyIndices(Table table) {
+        int[] keyIndices = SqlConnectorUtil.getJetSqlConnector(table).getPrimaryKey(table).stream()
+                .map(keyFieldName -> checkNotNegative(table.getFieldIndex(keyFieldName), keyFieldName))
+                .mapToInt(index -> index)
+                .toArray();
+        return ImmutableBitSet.of(keyIndices);
+    }
+
+    // TODO: __key = 1 AND field1 = field2
+    //  remainingFilter can reference row fields ?
+
+    private static Map<Integer, RexNode> decomposeConjunctiveEqualConstantExpressions(RexNode node, RexBuilder rexBuilder) {
+        if (node.getKind() == SqlKind.AND) {
+            Map<Integer, RexNode> expressionsByIndex = new HashMap<>();
+            for (RexNode operand : ((RexCall) node).getOperands()) {
+                Tuple2<Integer, RexNode> expressionByIndex = extractConstantEqualExpression(operand, rexBuilder);
+                if (expressionByIndex == null
+                        // field = 1 AND field = 2 -> always false, could/should be optimized to no-op
+                        || expressionsByIndex.putIfAbsent(expressionByIndex.getKey(), expressionByIndex.getValue()) != null) {
+                    return null;
+                }
+            }
+            return expressionsByIndex;
+        } else {
+            Tuple2<Integer, RexNode> expressionByIndex = extractConstantEqualExpression(node, rexBuilder);
+            return expressionByIndex == null ? null : singletonMap(expressionByIndex.getKey(), expressionByIndex.getValue());
+        }
+    }
+
+    @SuppressWarnings("checkstyle:AvoidNestedBlocks")
+    private static Tuple2<Integer, RexNode> extractConstantEqualExpression(RexNode node, RexBuilder rexBuilder) {
+        switch (node.getKind()) {
+            // field = true, Calcite simplifies to just `WHERE field`
             case INPUT_REF: {
-                return ((RexInputRef) filter).getIndex() == keyIndex
-                        ? rexBuilder.makeLiteral(true)
-                        : null;
+                return Tuple2.tuple2(((RexInputRef) node).getIndex(), rexBuilder.makeLiteral(true));
             }
-            // WHERE __key = false, calcite simplifies to `WHERE NOT __key`
+            // field = false, Calcite simplifies to `WHERE NOT field`
             case NOT: {
-                RexNode operand = ((RexCall) filter).getOperands().get(0);
-                return operand.getKind() == SqlKind.INPUT_REF && ((RexInputRef) operand).getIndex() == keyIndex
-                        ? rexBuilder.makeLiteral(false)
+                RexNode operand = ((RexCall) node).getOperands().get(0);
+                return operand.getKind() == SqlKind.INPUT_REF
+                        ? Tuple2.tuple2(((RexInputRef) operand).getIndex(), rexBuilder.makeLiteral(false))
                         : null;
             }
-            // __key = ...
+            // field = ...
             case EQUALS: {
-                Tuple2<Integer, RexNode> constantExpressionByIndex = extractConstantExpression((RexCall) filter);
-                //noinspection ConstantConditions
-                return constantExpressionByIndex != null && constantExpressionByIndex.getKey() == keyIndex
-                        ? constantExpressionByIndex.getValue()
+                Tuple2<Integer, RexNode> constantExpressionByIndex = extractConstantExpression((RexCall) node);
+                return constantExpressionByIndex != null
+                        ? Tuple2.tuple2(constantExpressionByIndex.getKey(), constantExpressionByIndex.getValue())
                         : null;
             }
             default:
@@ -308,27 +362,16 @@ public final class OptUtils {
         }
     }
 
-    private static int findKeyIndex(Table table) {
-        List<String> primaryKey = SqlConnectorUtil.getJetSqlConnector(table).getPrimaryKey(table);
-        // just single field keys supported at the moment
-        assert primaryKey.size() == 1;
-
-        int keyIndex = table.getFieldIndex(primaryKey.get(0));
-        assert keyIndex > -1;
-
-        return keyIndex;
+    private static Tuple2<Integer, RexNode> extractConstantExpression(RexCall node) {
+        Tuple2<Integer, RexNode> constantExpression = extractConstantExpression(node, 0);
+        return constantExpression != null ? constantExpression : extractConstantExpression(node, 1);
     }
 
-    private static Tuple2<Integer, RexNode> extractConstantExpression(RexCall condition) {
-        Tuple2<Integer, RexNode> constantExpression = extractConstantExpression(condition, 0);
-        return constantExpression != null ? constantExpression : extractConstantExpression(condition, 1);
-    }
-
-    private static Tuple2<Integer, RexNode> extractConstantExpression(RexCall condition, int i) {
-        RexNode firstOperand = condition.getOperands().get(i);
+    private static Tuple2<Integer, RexNode> extractConstantExpression(RexCall node, int i) {
+        RexNode firstOperand = node.getOperands().get(i);
         if (firstOperand.getKind() == SqlKind.INPUT_REF) {
             int index = ((RexInputRef) firstOperand).getIndex();
-            RexNode secondOperand = condition.getOperands().get(1 - i);
+            RexNode secondOperand = node.getOperands().get(1 - i);
             if (RexUtil.isConstant(secondOperand)) {
                 return Tuple2.tuple2(index, secondOperand);
             }

@@ -16,6 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.opt.logical;
 
+import com.hazelcast.jet.datamodel.Tuple2;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.sql.impl.schema.map.PartitionedMapTable;
 import org.apache.calcite.plan.RelOptRule;
@@ -26,6 +27,8 @@ import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 
+import java.util.List;
+
 import static org.apache.calcite.plan.RelOptRule.none;
 import static org.apache.calcite.plan.RelOptRule.operand;
 import static org.apache.calcite.plan.RelOptRule.operandJ;
@@ -34,9 +37,9 @@ import static org.apache.calcite.plan.RelOptRule.operandJ;
  * A collection of planner rules that match single key, constant expression,
  * {@link PartitionedMapTable} SELECT.
  * <p>For example,</p>
- * <blockquote><code>SELECT * FROM map WHERE __key = 1</code></blockquote>
+ * <blockquote><code>SELECT * FROM map WHERE __key = 1 AND this = 2</code></blockquote>
  * or
- * <blockquote><code>SELECT this + 1 FROM map WHERE __key = 1</code></blockquote>
+ * <blockquote><code>SELECT this + 1 FROM map WHERE __key = 1 AND this = 2</code></blockquote>
  * <p>
  * Such SELECT is translated to optimized, direct key {@code IMap} operation
  * which does not involve starting any job.
@@ -58,14 +61,17 @@ final class SelectByKeyMapLogicalRules {
 
             RelOptTable table = scan.getTable();
             RexBuilder rexBuilder = scan.getCluster().getRexBuilder();
-            RexNode keyCondition = OptUtils.extractKeyConstantExpression(table, rexBuilder);
-            if (keyCondition != null) {
+            Tuple2<List<RexNode>, RexNode> keyProjection = OptUtils.extractKeyProjection(table, rexBuilder);
+            if (keyProjection != null) {
+                //noinspection ConstantConditions
+                assert keyProjection.getKey().size() == 1;
                 SelectByKeyMapLogicalRel rel = new SelectByKeyMapLogicalRel(
                         scan.getCluster(),
                         OptUtils.toLogicalConvention(scan.getTraitSet()),
                         scan.getRowType(),
                         table,
-                        keyCondition,
+                        keyProjection.getKey().get(0),
+                        keyProjection.getValue(),
                         rexBuilder.identityProjects(scan.getRowType())
                 );
                 call.transformTo(rel);
@@ -91,14 +97,17 @@ final class SelectByKeyMapLogicalRules {
             LogicalTableScan scan = call.rel(1);
 
             RelOptTable table = scan.getTable();
-            RexNode keyCondition = OptUtils.extractKeyConstantExpression(table, project.getCluster().getRexBuilder());
-            if (keyCondition != null) {
+            Tuple2<List<RexNode>, RexNode> keyProjection = OptUtils.extractKeyProjection(table, project.getCluster().getRexBuilder());
+            if (keyProjection != null) {
+                //noinspection ConstantConditions
+                assert keyProjection.getKey().size() == 1;
                 SelectByKeyMapLogicalRel rel = new SelectByKeyMapLogicalRel(
                         scan.getCluster(),
                         OptUtils.toLogicalConvention(scan.getTraitSet()),
                         project.getRowType(),
                         table,
-                        keyCondition,
+                        keyProjection.getKey().get(0),
+                        keyProjection.getValue(),
                         project.getProjects()
                 );
                 call.transformTo(rel);

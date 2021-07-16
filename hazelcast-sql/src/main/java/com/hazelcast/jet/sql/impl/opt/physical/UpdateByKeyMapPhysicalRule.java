@@ -44,7 +44,8 @@ public final class UpdateByKeyMapPhysicalRule extends ConverterRule {
                 logicalUpdate.getCluster(),
                 OptUtils.toPhysicalConvention(logicalUpdate.getTraitSet()),
                 logicalUpdate.table(),
-                logicalUpdate.keyCondition(),
+                logicalUpdate.keyProjection(),
+                logicalUpdate.remainingFilter(),
                 logicalUpdate.updatedColumns(),
                 logicalUpdate.sourceExpressions()
         );

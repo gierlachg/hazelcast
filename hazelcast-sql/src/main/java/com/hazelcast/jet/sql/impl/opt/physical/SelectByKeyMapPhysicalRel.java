@@ -46,7 +46,8 @@ import static com.hazelcast.sql.impl.plan.node.PlanNodeFieldTypeProvider.FAILING
 public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements PhysicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
     private final List<? extends RexNode> projections;
 
     SelectByKeyMapPhysicalRel(
@@ -54,7 +55,8 @@ public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements Physic
             RelTraitSet traitSet,
             RelDataType rowType,
             RelOptTable table,
-            RexNode keyCondition,
+            RexNode keyProjection,
+            RexNode remainingFilter,
             List<? extends RexNode> projections
     ) {
         super(cluster, traitSet);
@@ -63,7 +65,8 @@ public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements Physic
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
         this.projections = projections;
     }
 
@@ -75,9 +78,15 @@ public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements Physic
         return table().getObjectKey();
     }
 
-    public Expression<?> keyCondition(QueryParameterMetadata parameterMetadata) {
+    public Expression<?> keyProjection(QueryParameterMetadata parameterMetadata) {
         RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata);
-        return keyCondition.accept(visitor);
+        return keyProjection.accept(visitor);
+    }
+
+    @SuppressWarnings("unchecked")
+    public Expression<Boolean> remainingFilter(QueryParameterMetadata parameterMetadata) {
+        RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata); // TODO: table schema
+        return (Expression<Boolean>) keyProjection.accept(visitor);
     }
 
     public KvRowProjector.Supplier rowProjectorSupplier(QueryParameterMetadata parameterMetadata) {
@@ -116,7 +125,8 @@ public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements Physic
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition)
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null)
                 .item("projections", Ord.zip(rowType.getFieldList()).stream()
                         .map(field -> {
                             String fieldName = field.e.getName() == null ? "field#" + field.i : field.e.getName();
@@ -127,6 +137,14 @@ public class SelectByKeyMapPhysicalRel extends AbstractRelNode implements Physic
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new SelectByKeyMapPhysicalRel(getCluster(), traitSet, rowType, table, keyCondition, projections);
+        return new SelectByKeyMapPhysicalRel(
+                getCluster(),
+                traitSet,
+                rowType,
+                table,
+                keyProjection,
+                remainingFilter,
+                projections
+        );
     }
 }

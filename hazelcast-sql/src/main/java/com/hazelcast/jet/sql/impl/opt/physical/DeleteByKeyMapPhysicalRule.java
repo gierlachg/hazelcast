@@ -44,7 +44,8 @@ public final class DeleteByKeyMapPhysicalRule extends ConverterRule {
                 logicalDelete.getCluster(),
                 OptUtils.toPhysicalConvention(logicalDelete.getTraitSet()),
                 logicalDelete.table(),
-                logicalDelete.keyCondition()
+                logicalDelete.keyProjection(),
+                logicalDelete.remainingFilter()
         );
     }
 }

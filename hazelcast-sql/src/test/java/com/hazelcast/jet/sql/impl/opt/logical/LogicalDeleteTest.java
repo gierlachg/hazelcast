@@ -88,6 +88,44 @@ public class LogicalDeleteTest extends OptimizerTestSupport {
     }
 
     @Test
+    public void t0() {
+        HazelcastTable table = partitionedTable("m", asList(field(KEY, INT), field(VALUE, VARCHAR),
+                field("field1", INT), field("field2", INT), field("field3", INT)), 10);
+        assertPlan(
+                optimizeLogical("DELETE FROM m WHERE (__key = 1 + 4 OR field1 = 2 + 3 AND (field2 = 3 + 4)) AND field3 = 45", table),
+                plan(
+                        planRow(0, DeleteLogicalRel.class),
+                        planRow(1, FullScanLogicalRel.class)
+                )
+        );
+    }
+
+    @Test
+    public void t1() {
+        HazelcastTable table = partitionedTable("m", asList(field(KEY, INT), field(VALUE, VARCHAR),
+                field("field1", INT), field("field2", INT), field("field3", INT)), 10);
+        assertPlan(
+                optimizeLogical("DELETE FROM m WHERE (__key = 1 + 4 AND field1 = 2 + 3 AND (field2 = 3 + 4)) AND field3 = 45", table),
+                plan(
+                        planRow(0, DeleteByKeyMapLogicalRel.class)
+                )
+        );
+    }
+
+    @Test
+    public void t2() {
+        HazelcastTable table = partitionedTable("m", asList(field(KEY, INT), field(VALUE, VARCHAR),
+                field("field1", INT), field("field2", INT), field("field3", INT)), 10);
+        assertPlan(
+                optimizeLogical("DELETE FROM m WHERE (__key = 1 + 4 AND field1 = 2 + 3 AND (field1 = 3 + 4)) AND field3 = 45", table),
+                plan(
+                        planRow(0, DeleteLogicalRel.class),
+                        planRow(1, FullScanLogicalRel.class)
+                )
+        );
+    }
+
+    @Test
     public void test_deleteByKeyAndKey() {
         HazelcastTable table = partitionedTable("m", asList(field(KEY, INT), field(VALUE, VARCHAR)), 10);
         assertPlan(

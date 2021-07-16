@@ -47,7 +47,8 @@ import static java.util.stream.Collectors.toMap;
 public class UpdateByKeyMapPhysicalRel extends AbstractRelNode implements PhysicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
     private final List<String> updatedColumns;
     private final List<RexNode> sourceExpressions;
 
@@ -55,7 +56,8 @@ public class UpdateByKeyMapPhysicalRel extends AbstractRelNode implements Physic
             RelOptCluster cluster,
             RelTraitSet traitSet,
             RelOptTable table,
-            RexNode keyCondition,
+            RexNode keyProjection,
+            RexNode remainingFilter,
             List<String> updatedColumns,
             List<RexNode> sourceExpressions
     ) {
@@ -64,7 +66,8 @@ public class UpdateByKeyMapPhysicalRel extends AbstractRelNode implements Physic
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
         this.updatedColumns = updatedColumns;
         this.sourceExpressions = sourceExpressions;
     }
@@ -77,9 +80,15 @@ public class UpdateByKeyMapPhysicalRel extends AbstractRelNode implements Physic
         return table().getObjectKey();
     }
 
-    public Expression<?> keyCondition(QueryParameterMetadata parameterMetadata) {
+    public Expression<?> keyProjection(QueryParameterMetadata parameterMetadata) {
         RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata);
-        return keyCondition.accept(visitor);
+        return keyProjection.accept(visitor);
+    }
+
+    @SuppressWarnings("unchecked")
+    public Expression<Boolean> remainingFilter(QueryParameterMetadata parameterMetadata) {
+        RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata); // TODO: table schema
+        return (Expression<Boolean>) keyProjection.accept(visitor);
     }
 
     public UpdatingEntryProcessor.Supplier updaterSupplier(QueryParameterMetadata parameterMetadata) {
@@ -113,13 +122,22 @@ public class UpdateByKeyMapPhysicalRel extends AbstractRelNode implements Physic
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition)
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null)
                 .item("updatedColumns", updatedColumns)
                 .item("sourceExpressions", sourceExpressions);
     }
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new UpdateByKeyMapPhysicalRel(getCluster(), traitSet, table, keyCondition, updatedColumns, sourceExpressions);
+        return new UpdateByKeyMapPhysicalRel(
+                getCluster(),
+                traitSet,
+                table,
+                keyProjection,
+                remainingFilter,
+                updatedColumns,
+                sourceExpressions
+        );
     }
 }

@@ -37,28 +37,35 @@ import java.util.List;
 public class DeleteByKeyMapLogicalRel extends AbstractRelNode implements LogicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
 
     DeleteByKeyMapLogicalRel(
             RelOptCluster cluster,
             RelTraitSet traitSet,
             RelOptTable table,
-            RexNode keyCondition
+            RexNode keyProjection,
+            RexNode remainingFilter
     ) {
         super(cluster, traitSet);
 
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
     }
 
     public RelOptTable table() {
         return table;
     }
 
-    public RexNode keyCondition() {
-        return keyCondition;
+    public RexNode keyProjection() {
+        return keyProjection;
+    }
+
+    public RexNode remainingFilter() {
+        return remainingFilter;
     }
 
     @Override
@@ -76,11 +83,12 @@ public class DeleteByKeyMapLogicalRel extends AbstractRelNode implements Logical
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition);
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null);
     }
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new DeleteByKeyMapLogicalRel(getCluster(), traitSet, table, keyCondition);
+        return new DeleteByKeyMapLogicalRel(getCluster(), traitSet, table, keyProjection, remainingFilter);
     }
 }

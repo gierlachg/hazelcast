@@ -45,7 +45,8 @@ final class SelectByKeyMapPhysicalRule extends ConverterRule {
                 OptUtils.toPhysicalConvention(logicalSelect.getTraitSet()),
                 logicalSelect.getRowType(),
                 logicalSelect.table(),
-                logicalSelect.keyCondition(),
+                logicalSelect.keyProjection(),
+                logicalSelect.remainingFilter(),
                 logicalSelect.projections()
         );
     }

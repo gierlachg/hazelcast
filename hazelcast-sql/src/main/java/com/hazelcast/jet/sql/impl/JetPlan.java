@@ -676,7 +676,8 @@ abstract class JetPlan extends SqlPlan {
         private final Set<PlanObjectKey> objectKeys;
         private final QueryParameterMetadata parameterMetadata;
         private final String mapName;
-        private final Expression<?> keyCondition;
+        private final Expression<?> keyProjection;
+        private final Expression<Boolean> remainingFilter;
         private final KvRowProjector.Supplier rowProjectorSupplier;
         private final SqlRowMetadata rowMetadata;
         private final JetPlanExecutor planExecutor;
@@ -687,7 +688,8 @@ abstract class JetPlan extends SqlPlan {
                 PlanObjectKey objectKey,
                 QueryParameterMetadata parameterMetadata,
                 String mapName,
-                Expression<?> keyCondition,
+                Expression<?> keyProjection,
+                Expression<Boolean> remainingFilter,
                 KvRowProjector.Supplier rowProjectorSupplier,
                 SqlRowMetadata rowMetadata,
                 JetPlanExecutor planExecutor,
@@ -698,7 +700,8 @@ abstract class JetPlan extends SqlPlan {
             this.objectKeys = Collections.singleton(objectKey);
             this.parameterMetadata = parameterMetadata;
             this.mapName = mapName;
-            this.keyCondition = keyCondition;
+            this.keyProjection = keyProjection;
+            this.remainingFilter = remainingFilter;
             this.rowProjectorSupplier = rowProjectorSupplier;
             this.rowMetadata = rowMetadata;
             this.planExecutor = planExecutor;
@@ -713,8 +716,12 @@ abstract class JetPlan extends SqlPlan {
             return mapName;
         }
 
-        Expression<?> keyCondition() {
-            return keyCondition;
+        Expression<?> keyProjection() {
+            return keyProjection;
+        }
+
+        Expression<Boolean> remainingFilter() {
+            return remainingFilter;
         }
 
         KvRowProjector.Supplier rowProjectorSupplier() {
@@ -888,7 +895,8 @@ abstract class JetPlan extends SqlPlan {
         private final Set<PlanObjectKey> objectKeys;
         private final QueryParameterMetadata parameterMetadata;
         private final String mapName;
-        private final Expression<?> keyCondition;
+        private final Expression<?> keyProjection;
+        private final Expression<Boolean> remainingFilter;
         private final UpdatingEntryProcessor.Supplier updaterSupplier;
         private final JetPlanExecutor planExecutor;
         private final List<Permission> permissions;
@@ -898,7 +906,8 @@ abstract class JetPlan extends SqlPlan {
                 PlanObjectKey objectKey,
                 QueryParameterMetadata parameterMetadata,
                 String mapName,
-                Expression<?> keyCondition,
+                Expression<?> keyProjection,
+                Expression<Boolean> remainingFilter,
                 UpdatingEntryProcessor.Supplier updaterSupplier,
                 JetPlanExecutor planExecutor,
                 List<Permission> permissions
@@ -908,7 +917,8 @@ abstract class JetPlan extends SqlPlan {
             this.objectKeys = Collections.singleton(objectKey);
             this.parameterMetadata = parameterMetadata;
             this.mapName = mapName;
-            this.keyCondition = keyCondition;
+            this.keyProjection = keyProjection;
+            this.remainingFilter = remainingFilter;
             this.updaterSupplier = updaterSupplier;
             this.planExecutor = planExecutor;
             this.permissions = permissions;
@@ -922,8 +932,12 @@ abstract class JetPlan extends SqlPlan {
             return mapName;
         }
 
-        Expression<?> keyCondition() {
-            return keyCondition;
+        Expression<?> keyProjection() {
+            return keyProjection;
+        }
+
+        Expression<Boolean> remainingFilter() {
+            return remainingFilter;
         }
 
         UpdatingEntryProcessor.Supplier updaterSupplier() {
@@ -961,7 +975,8 @@ abstract class JetPlan extends SqlPlan {
         private final Set<PlanObjectKey> objectKeys;
         private final QueryParameterMetadata parameterMetadata;
         private final String mapName;
-        private final Expression<?> keyCondition;
+        private final Expression<?> keyProjection;
+        private final Expression<Boolean> remainingFilter;
         private final JetPlanExecutor planExecutor;
         private final List<Permission> permissions;
 
@@ -970,7 +985,8 @@ abstract class JetPlan extends SqlPlan {
                 PlanObjectKey objectKey,
                 QueryParameterMetadata parameterMetadata,
                 String mapName,
-                Expression<?> keyCondition,
+                Expression<?> keyProjection,
+                Expression<Boolean> remainingFilter,
                 JetPlanExecutor planExecutor,
                 List<Permission> permissions
         ) {
@@ -979,7 +995,8 @@ abstract class JetPlan extends SqlPlan {
             this.objectKeys = Collections.singleton(objectKey);
             this.parameterMetadata = parameterMetadata;
             this.mapName = mapName;
-            this.keyCondition = keyCondition;
+            this.keyProjection = keyProjection;
+            this.remainingFilter = remainingFilter;
             this.planExecutor = planExecutor;
             this.permissions = permissions;
         }
@@ -992,8 +1009,12 @@ abstract class JetPlan extends SqlPlan {
             return mapName;
         }
 
-        Expression<?> keyCondition() {
-            return keyCondition;
+        Expression<?> keyProjection() {
+            return keyProjection;
+        }
+
+        Expression<Boolean> remainingFilter() {
+            return remainingFilter;
         }
 
         @Override

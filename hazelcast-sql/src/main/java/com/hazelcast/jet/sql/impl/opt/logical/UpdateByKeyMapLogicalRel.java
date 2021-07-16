@@ -37,7 +37,8 @@ import java.util.List;
 public class UpdateByKeyMapLogicalRel extends AbstractRelNode implements LogicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
     private final List<String> updatedColumns;
     private final List<RexNode> sourceExpressions;
 
@@ -45,7 +46,8 @@ public class UpdateByKeyMapLogicalRel extends AbstractRelNode implements Logical
             RelOptCluster cluster,
             RelTraitSet traitSet,
             RelOptTable table,
-            RexNode keyCondition,
+            RexNode keyProjection,
+            RexNode remainingFilter,
             List<String> updatedColumns,
             List<RexNode> sourceExpressions
     ) {
@@ -54,7 +56,8 @@ public class UpdateByKeyMapLogicalRel extends AbstractRelNode implements Logical
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
         this.updatedColumns = updatedColumns;
         this.sourceExpressions = sourceExpressions;
     }
@@ -63,8 +66,12 @@ public class UpdateByKeyMapLogicalRel extends AbstractRelNode implements Logical
         return table;
     }
 
-    public RexNode keyCondition() {
-        return keyCondition;
+    public RexNode keyProjection() {
+        return keyProjection;
+    }
+
+    public RexNode remainingFilter() {
+        return remainingFilter;
     }
 
     public List<String> updatedColumns() {
@@ -90,13 +97,22 @@ public class UpdateByKeyMapLogicalRel extends AbstractRelNode implements Logical
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition)
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null)
                 .item("updatedColumns", updatedColumns)
                 .item("sourceExpressions", sourceExpressions);
     }
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new UpdateByKeyMapLogicalRel(getCluster(), traitSet, table, keyCondition, updatedColumns, sourceExpressions);
+        return new UpdateByKeyMapLogicalRel(
+                getCluster(),
+                traitSet,
+                table,
+                keyProjection,
+                remainingFilter,
+                updatedColumns,
+                sourceExpressions
+        );
     }
 }

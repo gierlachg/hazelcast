@@ -42,20 +42,23 @@ import static com.hazelcast.sql.impl.plan.node.PlanNodeFieldTypeProvider.FAILING
 public class DeleteByKeyMapPhysicalRel extends AbstractRelNode implements PhysicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
 
     DeleteByKeyMapPhysicalRel(
             RelOptCluster cluster,
             RelTraitSet traitSet,
             RelOptTable table,
-            RexNode keyCondition
+            RexNode keyProjection,
+            RexNode remainingFilter
     ) {
         super(cluster, traitSet);
 
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
     }
 
     public String mapName() {
@@ -66,9 +69,15 @@ public class DeleteByKeyMapPhysicalRel extends AbstractRelNode implements Physic
         return table().getObjectKey();
     }
 
-    public Expression<?> keyCondition(QueryParameterMetadata parameterMetadata) {
+    public Expression<?> keyProjection(QueryParameterMetadata parameterMetadata) {
         RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata);
-        return keyCondition.accept(visitor);
+        return keyProjection.accept(visitor);
+    }
+
+    @SuppressWarnings("unchecked")
+    public Expression<Boolean> remainingFilter(QueryParameterMetadata parameterMetadata) {
+        RexToExpressionVisitor visitor = new RexToExpressionVisitor(FAILING_FIELD_TYPE_PROVIDER, parameterMetadata); // TODO: table schema
+        return (Expression<Boolean>) keyProjection.accept(visitor);
     }
 
     private PartitionedMapTable table() {
@@ -94,11 +103,12 @@ public class DeleteByKeyMapPhysicalRel extends AbstractRelNode implements Physic
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition);
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null);
     }
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new DeleteByKeyMapPhysicalRel(getCluster(), traitSet, table, keyCondition);
+        return new DeleteByKeyMapPhysicalRel(getCluster(), traitSet, table, keyProjection, remainingFilter);
     }
 }

@@ -37,7 +37,8 @@ import java.util.stream.Collectors;
 public class SelectByKeyMapLogicalRel extends AbstractRelNode implements LogicalRel {
 
     private final RelOptTable table;
-    private final RexNode keyCondition;
+    private final RexNode keyProjection;
+    private final RexNode remainingFilter;
     private final List<? extends RexNode> projections;
 
     SelectByKeyMapLogicalRel(
@@ -45,7 +46,8 @@ public class SelectByKeyMapLogicalRel extends AbstractRelNode implements Logical
             RelTraitSet traitSet,
             RelDataType rowType,
             RelOptTable table,
-            RexNode keyCondition,
+            RexNode keyProjection,
+            RexNode remainingFilter,
             List<? extends RexNode> projections
     ) {
         super(cluster, traitSet);
@@ -54,7 +56,8 @@ public class SelectByKeyMapLogicalRel extends AbstractRelNode implements Logical
         assert table.unwrap(HazelcastTable.class).getTarget() instanceof PartitionedMapTable;
 
         this.table = table;
-        this.keyCondition = keyCondition;
+        this.keyProjection = keyProjection;
+        this.remainingFilter = remainingFilter;
         this.projections = projections;
     }
 
@@ -62,8 +65,12 @@ public class SelectByKeyMapLogicalRel extends AbstractRelNode implements Logical
         return table;
     }
 
-    public RexNode keyCondition() {
-        return keyCondition;
+    public RexNode keyProjection() {
+        return keyProjection;
+    }
+
+    public RexNode remainingFilter() {
+        return remainingFilter;
     }
 
     public List<? extends RexNode> projections() {
@@ -80,7 +87,8 @@ public class SelectByKeyMapLogicalRel extends AbstractRelNode implements Logical
     public RelWriter explainTerms(RelWriter pw) {
         return pw
                 .item("table", table.getQualifiedName())
-                .item("keyCondition", keyCondition)
+                .item("keyProjection", keyProjection)
+                .itemIf("remainingFilter", remainingFilter, remainingFilter != null)
                 .item("projections", Ord.zip(rowType.getFieldList()).stream()
                         .map(field -> {
                             String fieldName = field.e.getName() == null ? "field#" + field.i : field.e.getName();
@@ -91,6 +99,14 @@ public class SelectByKeyMapLogicalRel extends AbstractRelNode implements Logical
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new SelectByKeyMapLogicalRel(getCluster(), traitSet, rowType, table, keyCondition, projections);
+        return new SelectByKeyMapLogicalRel(
+                getCluster(),
+                traitSet,
+                rowType,
+                table,
+                keyProjection,
+                remainingFilter,
+                projections
+        );
     }
 }

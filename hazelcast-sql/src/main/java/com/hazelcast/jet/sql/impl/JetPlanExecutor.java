@@ -245,14 +245,14 @@ public class JetPlanExecutor {
         List<Object> args = prepareArguments(plan.parameterMetadata(), arguments);
         InternalSerializationService serializationService = Util.getSerializationService(hazelcastInstance);
         SimpleExpressionEvalContext evalContext = new SimpleExpressionEvalContext(args, serializationService);
-        Object key = plan.keyCondition().eval(EmptyRow.INSTANCE, evalContext);
+        Object key = plan.keyProjection().eval(EmptyRow.INSTANCE, evalContext);
         CompletableFuture<Object[]> future = hazelcastInstance.getMap(plan.mapName())
                 .getAsync(key)
                 .toCompletableFuture()
                 .thenApply(value -> plan.rowProjectorSupplier()
                         .get(evalContext, Extractors.newBuilder(serializationService).build())
                         .project(key, value));
-        Object[] row = await(future, timeout);
+        Object[] row = await(future, timeout); // TODO: remaining filter
         return new JetSqlResultImpl(queryId, new JetStaticQueryResultProducer(row), plan.rowMetadata(), false);
     }
 
@@ -291,9 +291,9 @@ public class JetPlanExecutor {
         List<Object> args = prepareArguments(plan.parameterMetadata(), arguments);
         SimpleExpressionEvalContext evalContext =
                 new SimpleExpressionEvalContext(args, Util.getSerializationService(hazelcastInstance));
-        Object key = plan.keyCondition().eval(EmptyRow.INSTANCE, evalContext);
+        Object key = plan.keyProjection().eval(EmptyRow.INSTANCE, evalContext);
         CompletableFuture<Long> future = hazelcastInstance.getMap(plan.mapName())
-                .submitToKey(key, plan.updaterSupplier().get(arguments))
+                .submitToKey(key, plan.updaterSupplier().get(arguments)) // TODO: remaining filter
                 .toCompletableFuture();
         await(future, timeout);
         return SqlResultImpl.createUpdateCountResult(0);
@@ -303,9 +303,9 @@ public class JetPlanExecutor {
         List<Object> args = prepareArguments(plan.parameterMetadata(), arguments);
         SimpleExpressionEvalContext evalContext =
                 new SimpleExpressionEvalContext(args, Util.getSerializationService(hazelcastInstance));
-        Object key = plan.keyCondition().eval(EmptyRow.INSTANCE, evalContext);
+        Object key = plan.keyProjection().eval(EmptyRow.INSTANCE, evalContext);
         CompletableFuture<Void> future = hazelcastInstance.getMap(plan.mapName())
-                .submitToKey(key, EntryRemovingProcessor.ENTRY_REMOVING_PROCESSOR)
+                .submitToKey(key, EntryRemovingProcessor.ENTRY_REMOVING_PROCESSOR) // TODO: remaining filter
                 .toCompletableFuture();
         await(future, timeout);
         return SqlResultImpl.createUpdateCountResult(0);

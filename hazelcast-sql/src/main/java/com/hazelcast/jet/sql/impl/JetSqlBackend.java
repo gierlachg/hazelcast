@@ -292,7 +292,8 @@ public class JetSqlBackend implements SqlBackend {
                     planKey,
                     select.objectKey(),
                     parameterMetadata, select.mapName(),
-                    select.keyCondition(parameterMetadata),
+                    select.keyProjection(parameterMetadata),
+                    select.remainingFilter(parameterMetadata),
                     select.rowProjectorSupplier(parameterMetadata),
                     rowMetadata,
                     planExecutor,
@@ -330,7 +331,8 @@ public class JetSqlBackend implements SqlBackend {
                     update.objectKey(),
                     parameterMetadata,
                     update.mapName(),
-                    update.keyCondition(parameterMetadata),
+                    update.keyProjection(parameterMetadata),
+                    update.remainingFilter(parameterMetadata),
                     update.updaterSupplier(parameterMetadata),
                     planExecutor,
                     permissions
@@ -343,7 +345,8 @@ public class JetSqlBackend implements SqlBackend {
                     delete.objectKey(),
                     parameterMetadata,
                     delete.mapName(),
-                    delete.keyCondition(parameterMetadata),
+                    delete.keyProjection(parameterMetadata),
+                    delete.remainingFilter(parameterMetadata),
                     planExecutor,
                     permissions
             );

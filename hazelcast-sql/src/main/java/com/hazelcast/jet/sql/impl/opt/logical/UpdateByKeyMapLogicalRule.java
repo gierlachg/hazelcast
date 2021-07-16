@@ -16,6 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.opt.logical;
 
+import com.hazelcast.jet.datamodel.Tuple2;
 import com.hazelcast.jet.sql.impl.opt.OptUtils;
 import com.hazelcast.sql.impl.schema.map.PartitionedMapTable;
 import org.apache.calcite.plan.RelOptRule;
@@ -26,11 +27,13 @@ import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.apache.calcite.rex.RexNode;
 
+import java.util.List;
+
 /**
  * Planner rule that matches single key, constant expression,
  * {@link PartitionedMapTable} UPDATE.
  * <p>For example,</p>
- * <blockquote><code>UPDATE map SET this = 2 WHERE __key = 1</code></blockquote>
+ * <blockquote><code>UPDATE map SET this = 3 WHERE __key = 1 AND this = 2</code></blockquote>
  * <p>
  * Such UPDATE is translated to optimized, direct key {@code IMap} operation
  * which does not involve starting any job.
@@ -63,13 +66,16 @@ final class UpdateByKeyMapLogicalRule extends RelOptRule {
         LogicalTableScan scan = call.rel(2);
 
         RelOptTable table = scan.getTable();
-        RexNode keyCondition = OptUtils.extractKeyConstantExpression(table, update.getCluster().getRexBuilder());
-        if (keyCondition != null) {
+        Tuple2<List<RexNode>, RexNode> keyProjection = OptUtils.extractKeyProjection(table, update.getCluster().getRexBuilder());
+        if (keyProjection != null) {
+            //noinspection ConstantConditions
+            assert keyProjection.getKey().size() == 1;
             UpdateByKeyMapLogicalRel rel = new UpdateByKeyMapLogicalRel(
                     update.getCluster(),
                     OptUtils.toLogicalConvention(update.getTraitSet()),
                     table,
-                    keyCondition,
+                    keyProjection.getKey().get(0),
+                    keyProjection.getValue(),
                     update.getUpdateColumnList(),
                     update.getSourceExpressionList()
             );
